@@ -1,5 +1,5 @@
 """
-clv_analysis.py
+src/clv_analysis.py
 ----------------
 Analyzes Customer Lifetime Value (CLV) segments
 and churn behavior for business insights.

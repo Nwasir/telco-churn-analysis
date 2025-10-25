@@ -49,7 +49,7 @@ st.markdown("""
 predict_tab, performance_tab, importance_tab = st.tabs([
     "🔮 Predict",
     "📈 Model Performance",
-    "🧠 Feature Importance"
+    "🧠 CLV_Overview"
 ])
 
 # =========================================
@@ -69,16 +69,31 @@ with performance_tab:
     else:
         st.warning("No model metrics found. Run `evaluate.py` first.")
 
-    # Confusion Matrices
-    st.subheader("Confusion Matrices")
-    cols = st.columns(3)
-    models = ["logistic", "rf", "xgb"]
-    for col, model in zip(cols, models):
-        path = REPORTS_DIR / f"confusion_matrix_{model}.png"
-        if path.exists():
-            col.image(str(path), caption=f"{model.upper()} Confusion Matrix")
-        else:
-            col.warning(f"Missing: {path.name}")
+    # Confusion Matrix Section with Model Selector
+    st.subheader("🧩 Confusion Matrix Viewer")
+
+    # Dropdown to choose which model’s confusion matrix to display
+    model_choice = st.selectbox(
+        "Select Model to View Confusion Matrix",
+        options=["Logistic Regression", "Random Forest", "XGBoost"],
+        key="conf_matrix_selector"
+    )
+
+    # Map dropdown text to filenames
+    model_map = {
+        "Logistic Regression": "logistic",
+        "Random Forest": "rf",
+        "XGBoost": "xgb"
+    }
+
+    selected_model_key = model_map[model_choice]
+    confusion_path = REPORTS_DIR / f"confusion_matrix_{selected_model_key}.png"
+
+    if confusion_path.exists():
+        st.image(str(confusion_path), caption=f"{model_choice} Confusion Matrix", width='stretch')
+    else:
+        st.warning(f"Confusion matrix not found for {model_choice}. Expected file: {confusion_path.name}")
+
 
     # ROC Curves
     roc_path = REPORTS_DIR / "roc_curves.png"
@@ -89,25 +104,81 @@ with performance_tab:
         st.warning("ROC curve plot not found.")
 
 # =========================================
-# 🧠 PAGE 2: Feature Importance
+    # 🌟 Feature Importance Section
+    # =========================================
+    st.subheader("🌟 Feature Importance Viewer")
+
+    importance_option = st.selectbox(
+        "Select Model to View Feature Importance",
+        options=["Logistic Regression", "Random Forest", "XGBoost"],
+        key="feature_importance_selector"
+    )
+
+    # Map to expected filenames
+    importance_files = {
+        "Logistic Regression": REPORTS_DIR / "raw_feature_importance.png",
+        "Random Forest": REPORTS_DIR / "rf_importance.png",
+        "XGBoost": REPORTS_DIR / "xgb_importance.png"
+    }
+
+    selected_importance_path = importance_files[importance_option]
+
+    if selected_importance_path.exists():
+        st.image(str(selected_importance_path), caption=f"{importance_option} Feature Importance", width="stretch")
+    else:
+        st.warning(f"Feature importance plot not found for {importance_option}. Expected file: `{selected_importance_path.name}`")
+
+# =========================================
+# 🧠 PAGE 2: Feature Importance container
 # =========================================
 with importance_tab:
-    st.header("🧠 Model Interpretability")
+    st.subheader("💰 CLV Overview and Churn Insights")
 
-    importance_path = REPORTS_DIR / "raw_feature_importance.png"
-    shap_path = REPORTS_DIR / "rf_shap_summary.png"
+    clv_dist_path = DATA_DIR / "clv_distribution.png"
+    churn_by_clv_path = DATA_DIR / "churn_by_clv.png"
 
     col1, col2 = st.columns(2)
 
-    if importance_path.exists():
-        col1.image(str(importance_path), caption="Raw Feature Importance")
+    if clv_dist_path.exists():
+        col1.image(str(clv_dist_path), caption="Customer Lifetime Value (CLV) Distribution")
     else:
-        col1.warning("Missing raw feature importance plot.")
+        col1.warning("Missing CLV distribution plot. Run `src/clv_analysis.py` first.")
 
-    if shap_path.exists():
-        col2.image(str(shap_path), caption="SHAP Summary Plot")
+    if churn_by_clv_path.exists():
+        col2.image(str(churn_by_clv_path), caption="Churn Rate by CLV Segment")
     else:
-        col2.warning("Missing SHAP plot.")
+        col2.warning("Missing churn-by-CLV plot. Run `src/clv_analysis.py` first.")
+
+    # Show churn rate summary if available
+    churn_summary_path = DATA_DIR / "train.csv"
+    if churn_summary_path.exists():
+        try:
+            df_train = pd.read_csv(churn_summary_path)
+            if "CLV" in df_train.columns:
+                df_train["CLV_quartile"] = pd.qcut(df_train["CLV"], q=4, labels=["Low", "Medium", "High", "Premium"])
+                churn_summary = (
+                    df_train.groupby("CLV_quartile", observed=False)["Churn"]
+                    .mean()
+                    .reset_index()
+                    .rename(columns={"Churn": "ChurnRate"})
+                )
+                churn_summary["ChurnRate"] = churn_summary["ChurnRate"] * 100
+                st.markdown("### 📊 Churn Rate by CLV Segment")
+                st.dataframe(churn_summary.style.format({"ChurnRate": "{:.2f}%"}))
+            else:
+                st.info("CLV column not found in dataset. Please rerun CLV analysis.")
+        except Exception as e:
+            st.error(f"Error loading churn summary: {e}")
+    else:
+        st.info("Training data not found for CLV summary.")
+
+    # Business insights
+    st.markdown("### 💡 Key Business Insights")
+    st.markdown("""
+    - Low-CLV customers typically have **shorter tenure or monthly contracts**, leading to higher churn.
+    - Premium-CLV customers show **lower churn rates**, providing **higher ROI** if retained.
+    - Target **Medium-CLV users** with loyalty programs or bundle offers to **boost retention**.
+    """)
 
 # =========================================
 # 🔮 PAGE 3: Predict Single Customer
@@ -343,7 +414,7 @@ with predict_tab:
     st.markdown("<br>", unsafe_allow_html=True)  # Add some space
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        predict_clicked = st.button("🔮 Predict", key="predict_button", use_container_width=True)
+        predict_clicked = st.button("🔮 Predict", key="predict_button", width="stretch")
     
     if predict_clicked:
         # Count total services
@@ -441,9 +512,9 @@ with predict_tab:
         # Create a progress bar for the probability
         with st.container():
             if prediction == 1:
-                st.progress(prob)
+                st.progress(float(prob))
             else:
-                st.progress(1 - prob)
+                st.progress(float(1 - prob))
             st.write(f"**Churn Probability:** {prob:.2%}")
         
         st.markdown('</div></div>', unsafe_allow_html=True)
