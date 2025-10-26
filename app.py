@@ -90,7 +90,12 @@ with performance_tab:
     confusion_path = REPORTS_DIR / f"confusion_matrix_{selected_model_key}.png"
 
     if confusion_path.exists():
-        st.image(str(confusion_path), caption=f"{model_choice} Confusion Matrix", width='stretch')
+        st.image(
+            str(confusion_path),
+            caption=f"{model_choice} Confusion Matrix",
+            width=600,
+            output_format="auto"
+        )
     else:
         st.warning(f"Confusion matrix not found for {model_choice}. Expected file: {confusion_path.name}")
 
@@ -99,11 +104,12 @@ with performance_tab:
     roc_path = REPORTS_DIR / "roc_curves.png"
     if roc_path.exists():
         st.subheader("ROC Curve Comparison")
-        st.image(str(roc_path))
+        st.image(str(roc_path), caption="ROC Curve Comparison",
+                  width=600, output_format="auto")
     else:
         st.warning("ROC curve plot not found.")
 
-# =========================================
+    # =========================================
     # 🌟 Feature Importance Section
     # =========================================
     st.subheader("🌟 Feature Importance Viewer")
@@ -124,7 +130,11 @@ with performance_tab:
     selected_importance_path = importance_files[importance_option]
 
     if selected_importance_path.exists():
-        st.image(str(selected_importance_path), caption=f"{importance_option} Feature Importance", width="stretch")
+        st.image(str(selected_importance_path), 
+                 caption=f"{importance_option} Feature Importance", 
+                 width=800, output_format="auto"
+        )
+
     else:
         st.warning(f"Feature importance plot not found for {importance_option}. Expected file: `{selected_importance_path.name}`")
 
@@ -276,11 +286,18 @@ with predict_tab:
         tech_support = st.selectbox("Tech Support", ["No", "Yes", "No internet service"], key="tech_support")
         streaming_tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"], key="streaming_tv")
         streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet service"], key="streaming_movies")
+        
+        # Count total services right after collecting all service inputs
+        service_cols = [phone, multiple_lines, internet, online_security,
+                      online_backup, device_protection, tech_support,
+                      streaming_tv, streaming_movies]
+        services_count = sum(1 for s in service_cols if s == "Yes")
+        internet_no_techsupport = 1 if (internet in ["DSL", "Fiber optic"] and tech_support == "No") else 0
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Billing column (Contract & Payment)
     with col_billing:        
-        st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">💳  Contact & Payment</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">💳  Contract & Payment</div>', unsafe_allow_html=True)
         contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"], key="contract")
         paperless = st.selectbox("Paperless Billing", ["No", "Yes"], key="paperless")
         payment_method = st.selectbox(
@@ -288,6 +305,14 @@ with predict_tab:
             ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"],
             key="payment_method"
         )
+        monthly_charges = st.number_input("Monthly Charges ($)", min_value=0.0, max_value=500.0, value=50.0, step=5.0, key="monthly")
+        total_charges = st.number_input("Total Charges ($)", min_value=0.0, max_value=10000.0, value=tenure * monthly_charges, step=100.0, key="total")
+        
+        # Calculate derived values
+        ratio = total_charges / max(1, tenure * monthly_charges)
+        expected_tenure = 36  # Example average tenure for non-churned customers
+        clv = monthly_charges * expected_tenure
+        
         st.markdown('</div>', unsafe_allow_html=True)
 
     # Calculate base price guidance
@@ -305,35 +330,6 @@ with predict_tab:
     service_price = sum(10.0 for s in [online_security, online_backup, device_protection,
                                      tech_support, streaming_tv, streaming_movies] if s == "Yes")
     recommended_price = base_price + service_price
-
-    # Now render monthly and total charges inside the billing column so help text uses computed recommended_price
-    with col_billing:
-        # Add some spacing inside the billing card
-        st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-        monthly_charges = st.number_input(
-            "Monthly Charges",
-            min_value=0.0,
-            max_value=500.0,
-            step=1.0,
-            help=f"Recommended price range: ${recommended_price:.2f} - ${recommended_price * 1.2:.2f}",
-            key="monthly_charges"
-        )
-        # Calculate expected total charges range
-        min_expected = monthly_charges * (tenure * 0.9)  # Allow 10% lower for promotions
-        max_expected = monthly_charges * (tenure * 1.1)  # Allow 10% higher for fees
-        total_charges = st.number_input(
-            "Total Charges",
-            min_value=0.0,
-            step=10.0,
-            help=f"Expected range for {tenure} months: ${min_expected:.2f} - ${max_expected:.2f}",
-            key="total_charges"
-        )
-
-    # Close Services section
-    st.markdown('</div></div>', unsafe_allow_html=True)
-
-    # Close Services section (HTML wrapper no longer used for widgets)
-    st.markdown('</div></div>', unsafe_allow_html=True)
 
     # Add separator and styling for model selection
     st.markdown("<br><hr><br>", unsafe_allow_html=True)
@@ -416,105 +412,137 @@ with predict_tab:
     with col2:
         predict_clicked = st.button("🔮 Predict", key="predict_button", width="stretch")
     
-    if predict_clicked:
-        # Count total services
-        service_cols = [phone, multiple_lines, internet, online_security,
-                      online_backup, device_protection, tech_support,
-                      streaming_tv, streaming_movies]
-        services_count = sum(1 for s in service_cols if s == "Yes")
+        if predict_clicked:
+            expected_tenure = 37.57  # from data_prep.py
         
-        # Calculate monthly_to_total_ratio
-        ratio = total_charges / max(1, tenure * monthly_charges)
+            # Use the same expected tenure as in training
+            expected_tenure = 37.57  # from data_prep.py
+            clv = monthly_charges * expected_tenure
         
-        # Determine internet_no_techsupport flag
-        internet_no_techsupport = 1 if (internet != "No" and tech_support == "No") else 0
+            # Create a dummy customerID for prediction
+            dummy_id = "PRED-" + pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
+            
+            input_df = pd.DataFrame([{
+                "customerID": dummy_id,
+                "gender": gender,
+                "SeniorCitizen": 1 if str(senior).lower() in ["1","yes","true"] else 0,
+                "Partner": partner,
+                "Dependents": dependents,
+                "tenure": tenure,
+                "tenure_bucket": tenure_bucket,
+                "PhoneService": phone,
+                "MultipleLines": multiple_lines,
+                "InternetService": internet,
+                "OnlineSecurity": online_security,
+                "OnlineBackup": online_backup,
+                "DeviceProtection": device_protection,
+                "TechSupport": tech_support,
+                "StreamingTV": streaming_tv,
+                "StreamingMovies": streaming_movies,
+                "Contract": contract,
+                "PaperlessBilling": paperless,
+                "PaymentMethod": payment_method,
+                "MonthlyCharges": monthly_charges,
+                "TotalCharges": total_charges,
+                "services_count": services_count,
+                "monthly_to_total_ratio": ratio,
+                "internet_no_techsupport": internet_no_techsupport,
+                "ExpectedTenure": expected_tenure,
+                "CLV": clv
+            }])
         
-        # Use the same expected tenure as in training
-        expected_tenure = 37.57  # from data_prep.py
-        clv = monthly_charges * expected_tenure
-    
-        # Create a dummy customerID for prediction
-        dummy_id = "PRED-" + pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
-        
-        input_df = pd.DataFrame([{
-            "customerID": dummy_id,
-            "gender": gender,
-            "SeniorCitizen": 1 if str(senior).lower() in ["1","yes","true"] else 0,
-            "Partner": partner,
-            "Dependents": dependents,
-            "tenure": tenure,
-            "tenure_bucket": tenure_bucket,
-            "PhoneService": phone,
-            "MultipleLines": multiple_lines,
-            "InternetService": internet,
-            "OnlineSecurity": online_security,
-            "OnlineBackup": online_backup,
-            "DeviceProtection": device_protection,
-            "TechSupport": tech_support,
-            "StreamingTV": streaming_tv,
-            "StreamingMovies": streaming_movies,
-            "Contract": contract,
-            "PaperlessBilling": paperless,
-            "PaymentMethod": payment_method,
-            "MonthlyCharges": monthly_charges,
-            "TotalCharges": total_charges,
-            "services_count": services_count,
-            "monthly_to_total_ratio": ratio,
-            "internet_no_techsupport": internet_no_techsupport,
-            "ExpectedTenure": expected_tenure,
-            "CLV": clv
-        }])
-    
-        if preprocessor:
-            try:
-                X_processed = preprocessor.transform(input_df)
-            except Exception:
-                X_processed = input_df
-        else:
-            X_processed = input_df
-    
-        prediction = model.predict(X_processed)[0]
-        prob = model.predict_proba(X_processed)[0][1]
-    
-        # Create prediction results container
-        st.markdown('<div class="prediction-container">', unsafe_allow_html=True)
-        st.markdown('<h3>Prediction Result</h3>', unsafe_allow_html=True)
-        
-        # Style the prediction box
-        st.markdown("""
-            <style>
-            .result-box {
-                background-color: #f8f9fa;
-                border-radius: 15px;
-                padding: 30px;
-                margin: 20px auto;
-                max-width: 500px;
-                text-align: center;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-            }
-            .result-title {
-                font-size: 1.2em;
-                margin-bottom: 20px;
-                color: #333;
-            }
-            .probability-bar {
-                margin: 15px 0;
-            }
-            </style>
-        """, unsafe_allow_html=True)
-        
-        # Display results in a centered box
-        # st.markdown('<div class="result-box">', unsafe_allow_html=True)
-        st.markdown(f'<div class="result-title result-box">Model Used: {selected_model}</div>', unsafe_allow_html=True)
-        st.write("**Churn Prediction:**", "Yes 🟥" if prediction == 1 else "No 🟩")
-        st.write("**Confidence Score:**")
-        
-        # Create a progress bar for the probability
-        with st.container():
-            if prediction == 1:
-                st.progress(float(prob))
+            if preprocessor:
+                try:
+                    X_processed = preprocessor.transform(input_df)
+                except Exception:
+                    X_processed = input_df
             else:
-                st.progress(float(1 - prob))
-            st.write(f"**Churn Probability:** {prob:.2%}")
+                X_processed = input_df
         
-        st.markdown('</div></div>', unsafe_allow_html=True)
+            prediction = model.predict(X_processed)[0]
+            prob = model.predict_proba(X_processed)[0][1]
+
+            # Compute confidence (certainty) from probability
+            confidence = prob if prediction == 1 else (1 - prob)
+            risk_label = "HIGH" if prob >= 0.5 else "LOW"
+            clv_label = (
+                "Below Average" if clv < 3000 else
+                "Average" if clv < 5000 else
+                "Above Average"
+            )
+            conf_label = "High" if confidence >= 0.9 else "Moderate"
+
+            # ==============================================
+            # 🎨 Styled Result Cards
+            # ==============================================
+            st.markdown("""
+            <style>
+            .metric-card {
+                border-radius: 12px;
+                padding: 25px;
+                text-align: center;
+                color: white;
+                font-weight: 600;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            }
+            .high-risk { background-color: #e74c3c; }
+            .clv-card { background-color: #d98c2c; }
+            .confidence-card { background-color: #27ae60; }
+            .metric-value { font-size: 2em; margin: 10px 0; }
+            .metric-sub { font-size: 0.9em; opacity: 0.9; }
+            </style>
+            """, unsafe_allow_html=True)
+
+            st.markdown("### 📊 Prediction Results")
+            st.markdown("#### Key Metrics")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card high-risk">
+                    <div>HIGH</div>
+                    <div>Churn Probability</div>
+                    <div class="metric-value">{prob*100:.1f}%</div>
+                    <div class="metric-sub">{risk_label} RISK<br>±0.0% uncertainty</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col2:
+                st.markdown(f"""
+                <div class="metric-card clv-card">
+                    <div>$</div>
+                    <div>Customer Lifetime Value</div>
+                    <div class="metric-value">${clv:,.0f}</div>
+                    <div class="metric-sub">{clv_label}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with col3:
+                st.markdown(f"""
+                <div class="metric-card confidence-card">
+                    <div>HIGH</div>
+                    <div>Prediction Confidence</div>
+                    <div class="metric-value">{conf_label}</div>
+                    <div class="metric-sub">{confidence*100:.0f}% Certain</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # ==============================================
+            # 💡 Business Insights Section
+            # ==============================================
+            st.markdown("### 💡 Business Insights")
+            if prediction == 1:
+                st.markdown(f"""
+                - The model predicts **high likelihood of churn ({prob*100:.1f}%)**.
+                - Customer’s CLV is **${clv:,.0f} ({clv_label})**, meaning potential revenue loss if churned.
+                - Recommend targeting with **retention incentives** (discounts, loyalty rewards, or personalized offers).
+                - Focus on improving **service quality and contract engagement** to reduce churn risk.
+                """)
+            else:
+                st.markdown(f"""
+                - The customer is **unlikely to churn** (churn probability {prob*100:.1f}%).
+                - CLV of **${clv:,.0f} ({clv_label})** indicates a valuable and stable customer.
+                - Maintain retention through **consistent communication and customer satisfaction monitoring**.
+                - Consider **upselling or cross-selling** premium plans or add-ons.
+                """)
+

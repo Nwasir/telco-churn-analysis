@@ -1,5 +1,5 @@
 """
-predict.py
+src/predict.py
 -----------
 Generates churn predictions using trained models.
 Handles both pipeline and non-pipeline models automatically.

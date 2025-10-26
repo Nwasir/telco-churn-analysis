@@ -1,5 +1,5 @@
 """
-data_prep.py
+src/data_prep.py
 -------------
 Loads and cleans the IBM Telco Churn dataset,
 engineers CLV-related features, and saves train/val/test splits.
