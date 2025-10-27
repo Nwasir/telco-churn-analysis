@@ -66,7 +66,7 @@ preprocessor = ColumnTransformer([
 models = {
     "logistic": LogisticRegression(max_iter=1000, random_state=42),
     "rf": RandomForestClassifier(
-        n_estimators=200, max_depth=10, random_state=42, n_jobs=-1
+        n_estimators=500, max_depth=None, class_weight='balanced', n_jobs=-1, random_state=42
     ),
     "xgb": XGBClassifier(
         n_estimators=300,
@@ -121,7 +121,7 @@ for name, model in models.items():
 # 7. Save metrics summary
 # ---------------------------------------------------------------------
 metrics_df = pd.DataFrame(results)
-metrics_df.to_csv("models/metrics_summary.csv", index=False)
+metrics_df.to_csv("data/processed/metrics_summary.csv", index=False)
 
 print("\n📊 Model Performance Summary:")
 print(metrics_df)

@@ -58,13 +58,13 @@ predict_tab, performance_tab, importance_tab = st.tabs([
 with performance_tab:
     st.header("📈 Model Evaluation Results")
 
-    metrics_path = DATA_DIR / "model_metrics.csv"
+    metrics_path = DATA_DIR / "metrics_summary.csv"
     if metrics_path.exists():
         metrics_df = pd.read_csv(metrics_path, index_col=0)
         st.dataframe(metrics_df.style.highlight_max(axis=0, color='lightgreen'))
 
-        best_model_name = metrics_df["ROC-AUC"].idxmax()
-        st.success(f"🏆 Best Model: **{best_model_name.upper()}** (ROC-AUC = {metrics_df.loc[best_model_name, 'ROC-AUC']:.3f})")
+        best_model_name = metrics_df["AUC"].idxmax()
+        st.success(f"🏆 Best Model: **{best_model_name.upper()}** (AUC = {metrics_df.loc[best_model_name, 'AUC']:.3f})")
 
     else:
         st.warning("No model metrics found. Run `evaluate.py` first.")
@@ -139,7 +139,7 @@ with performance_tab:
         st.warning(f"Feature importance plot not found for {importance_option}. Expected file: `{selected_importance_path.name}`")
 
 # =========================================
-# 🧠 PAGE 2: Feature Importance container
+# 🧠 CLV Overview and Churn Insights
 # =========================================
 with importance_tab:
     st.subheader("💰 CLV Overview and Churn Insights")
@@ -191,7 +191,7 @@ with importance_tab:
     """)
 
 # =========================================
-# 🔮 PAGE 3: Predict Single Customer
+# 🔮 Predict Single Customer
 # =========================================
 with predict_tab:
     st.header("🔮 Predict Customer Churn")
@@ -202,59 +202,16 @@ with predict_tab:
         "Random Forest": {"file": "rf.pkl", "desc": "Ensemble model that handles non-linear relationships well"},
         "XGBoost": {"file": "xgb.pkl", "desc": "Advanced gradient boosting model with high predictive power"}
     }
-
+    
     preprocessor_path = MODEL_DIR / "preprocessor.pkl"
 
     # ---- Load preprocessor if available ----
-    preprocessor = None
-    if preprocessor_path.exists():
-        preprocessor = joblib.load(preprocessor_path)
+    preprocessor = joblib.load(preprocessor_path) if preprocessor_path.exists() else None
 
-    # Add CSS for form sections (styling for column layout)
-    st.markdown("""
-        <style>
-        .stApp .form-columns .css-1lcbmhc { padding: 0; }
-        .section-title {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .section-title .icon {
-            font-size: 20px;
-        }
-        .card-style {
-            background-color: #ffffff;
-            border-radius: 12px;
-            padding: 20px 22px;
-            border: 1px solid #eef2f6;
-            box-shadow: 0 4px 10px rgba(16,24,40,0.04);
-        }
-        /* style the built-in Streamlit selectboxes/inputs to look like cards */
-        .stSelectbox > div[data-baseweb="select"] {
-            background-color: #f3f6f8 !important;
-            border-radius: 10px !important;
-            padding: 8px 12px !important;
-            height: 44px !important;
-        }
-        .stNumberInput > div > div {
-            background-color: #f3f6f8 !important;
-            border-radius: 10px !important;
-            padding: 8px 12px !important;
-            height: 44px !important;
-        }
-        .stSlider > div div[role="slider"] {
-            margin-top: 6px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-
-    # Use three Streamlit columns so widgets render inside them (widgets must be created inside columns)
+    # ---- Input Sections (Demographics, Services, Billing) ----
     col_dem, col_services, col_billing = st.columns(3, gap="large")
 
-    # Demographics column (matches screenshot: 'Demographics')
+    # Demographics
     with col_dem:
         st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">👤  Demographics</div>', unsafe_allow_html=True)
         gender = st.selectbox("Gender", ["Female", "Male"], key="gender")
@@ -264,19 +221,15 @@ with predict_tab:
         tenure = st.slider("Tenure (months)", min_value=0, max_value=72, value=1, key="tenure")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Compute tenure bucket from tenure input (used downstream)
-    if tenure <= 6:
-        tenure_bucket = "0-6m"
-    elif tenure <= 12:
-        tenure_bucket = "6-12m"
-    elif tenure <= 24:
-        tenure_bucket = "12-24m"
-    else:
-        tenure_bucket = "24m+"
+    # Tenure bucket
+    if tenure <= 6: tenure_bucket = "0-6m"
+    elif tenure <= 12: tenure_bucket = "6-12m"
+    elif tenure <= 24: tenure_bucket = "12-24m"
+    else: tenure_bucket = "24m+"
 
-    # Services column
+    # Services
     with col_services:        
-        st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">�  Services</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">🛠️  Services</div>', unsafe_allow_html=True)
         phone = st.selectbox("Phone Service", ["Yes", "No"], key="phone")
         multiple_lines = st.selectbox("Multiple Lines", ["No", "Yes", "No phone service"], key="multiple_lines")
         internet = st.selectbox("Internet Service", ["DSL", "Fiber optic", "No"], key="internet")
@@ -287,15 +240,15 @@ with predict_tab:
         streaming_tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"], key="streaming_tv")
         streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet service"], key="streaming_movies")
         
-        # Count total services right after collecting all service inputs
+        # Derived service counts
         service_cols = [phone, multiple_lines, internet, online_security,
-                      online_backup, device_protection, tech_support,
-                      streaming_tv, streaming_movies]
+                        online_backup, device_protection, tech_support,
+                        streaming_tv, streaming_movies]
         services_count = sum(1 for s in service_cols if s == "Yes")
         internet_no_techsupport = 1 if (internet in ["DSL", "Fiber optic"] and tech_support == "No") else 0
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Billing column (Contract & Payment)
+    # Billing
     with col_billing:        
         st.markdown('<div class="section-title card-style" style="color:#4b2a7a;">💳  Contract & Payment</div>', unsafe_allow_html=True)
         contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"], key="contract")
@@ -308,120 +261,59 @@ with predict_tab:
         monthly_charges = st.number_input("Monthly Charges ($)", min_value=0.0, max_value=500.0, value=50.0, step=5.0, key="monthly")
         total_charges = st.number_input("Total Charges ($)", min_value=0.0, max_value=10000.0, value=tenure * monthly_charges, step=100.0, key="total")
         
-        # Calculate derived values
-        ratio = total_charges / max(1, tenure * monthly_charges)
-        expected_tenure = 36  # Example average tenure for non-churned customers
+        # CLV calculation
+        expected_tenure = 37.57
         clv = monthly_charges * expected_tenure
-        
+        ratio = total_charges / max(1, tenure * monthly_charges)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Calculate base price guidance
-    base_price = 20.0  # Base connection fee
-    if phone == "Yes":
-        base_price += 20.0
-        if multiple_lines == "Yes":
-            base_price += 10.0
-    if internet == "DSL":
-        base_price += 30.0
-    elif internet == "Fiber optic":
-        base_price += 50.0
-    
-    # Add service prices
-    service_price = sum(10.0 for s in [online_security, online_backup, device_protection,
-                                     tech_support, streaming_tv, streaming_movies] if s == "Yes")
-    recommended_price = base_price + service_price
-
-    # Add separator and styling for model selection
-    st.markdown("<br><hr><br>", unsafe_allow_html=True)
-    
-    # Add custom CSS for centering and styling
+    # ---- Model Selection ----
     st.markdown("""
         <style>
-        .model-section {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            text-align: center;
+        .model-header-container {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            margin: 2rem 0;
         }
-        .centered-header {
+        .model-header {
             text-align: center;
-            padding: 20px 0;
-            margin-bottom: 20px;
-        }
-        .model-description {
-            text-align: center;
-            padding: 15px 20px;
-            margin: 20px auto;
-            max-width: 600px;
-            border-radius: 5px;
-            background-color: #f8f9fa;
-            border: 1px solid #e1e4e8;
-        }
-        .stButton > button {
-            margin: 30px auto;
-            display: block;
-            padding: 12px 50px;
-            min-width: 300px;
-            border-radius: 25px;
-            background-color: #FF4B4B;
-            color: white;
-            font-weight: bold;
-        }
-        .prediction-container {
-            max-width: 800px;
-            margin: 40px auto;
-            padding: 20px;
-            text-align: center;
+            color: #4b2a7a;
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+            padding: 0;
         }
         </style>
     """, unsafe_allow_html=True)
-        
-    # Model Selection Section with container
-    st.markdown('<div class="model-section">', unsafe_allow_html=True)
-    st.markdown('<h3 class="centered-header">🤖 Model Selection</h3>', unsafe_allow_html=True)
     
-    # Center the model selection dropdown
-    col1, col2, col3 = st.columns([1, 2, 1])
+    st.markdown("""
+        <div class="model-header-container">
+            <h3 class="model-header">🤖 Model Selection</h3>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        selected_model = st.selectbox(
-            "Select Prediction Model",
-            list(models_info.keys()),
-            key="model_selector"
-        )
-        
-        # Show model description in centered info box
-        st.markdown(f'<div class="model-description">{models_info[selected_model]["desc"]}</div>', 
-                   unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Set model path based on selection
+        selected_model = st.selectbox("Select Prediction Model", list(models_info.keys()), key="model_selector")
+        st.markdown(f'<div class="model-description">{models_info[selected_model]["desc"]}</div>', unsafe_allow_html=True)
+
     model_path = MODEL_DIR / models_info[selected_model]["file"]
-    
-    # Check if model exists
     if not model_path.exists():
         st.error(f"⚠️ {selected_model} model file not found. Please train the model first.")
         st.stop()
-    
-    # Load the selected model
     model = joblib.load(model_path)
+
     
-    # Centered predict button with more space around it
-    st.markdown("<br>", unsafe_allow_html=True)  # Add some space
-    col1, col2, col3 = st.columns([1, 2, 1])
+    threshold = 0.5   
+
+    # ---- Predict Button ----
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        predict_clicked = st.button("🔮 Predict", key="predict_button", width="stretch")
-    
+        predict_clicked = st.button("🔮 Predict", key="predict_button")
         if predict_clicked:
-            expected_tenure = 37.57  # from data_prep.py
-        
-            # Use the same expected tenure as in training
-            expected_tenure = 37.57  # from data_prep.py
-            clv = monthly_charges * expected_tenure
-        
-            # Create a dummy customerID for prediction
+            # Build input_df
             dummy_id = "PRED-" + pd.Timestamp.now().strftime("%Y%m%d-%H%M%S")
-            
             input_df = pd.DataFrame([{
                 "customerID": dummy_id,
                 "gender": gender,
@@ -450,41 +342,27 @@ with predict_tab:
                 "ExpectedTenure": expected_tenure,
                 "CLV": clv
             }])
-        
-            if preprocessor:
-                try:
-                    X_processed = preprocessor.transform(input_df)
-                except Exception:
-                    X_processed = input_df
-            else:
-                X_processed = input_df
-        
-            prediction = model.predict(X_processed)[0]
+            
+            X_processed = preprocessor.transform(input_df) if preprocessor else input_df
             prob = model.predict_proba(X_processed)[0][1]
-
-            # Compute confidence (certainty) from probability
+            prediction = 1 if prob >= threshold else 0
             confidence = prob if prediction == 1 else (1 - prob)
-            risk_label = "HIGH" if prob >= 0.5 else "LOW"
-            clv_label = (
-                "Below Average" if clv < 3000 else
-                "Average" if clv < 5000 else
-                "Above Average"
-            )
+            risk_label = "HIGH" if prob >= threshold else "LOW"
+            clv_label = "Below Average" if clv < 3000 else "Average" if clv < 5000 else "Above Average"
             conf_label = "High" if confidence >= 0.9 else "Moderate"
 
-            # ==============================================
-            # 🎨 Styled Result Cards
-            # ==============================================
+            # ---- Styled Result Cards ----
             st.markdown("""
             <style>
-            .metric-card {
-                border-radius: 12px;
-                padding: 25px;
-                text-align: center;
-                color: white;
+            h3.centered-header { 
+                text-align: center !important;
+                width: 100%;
+                display: block;
+                margin: 1em auto;
+                font-size: 1.5em;
                 font-weight: 600;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             }
+            .metric-card { border-radius: 12px; padding: 25px; text-align: center; color: white; font-weight: 600; box-shadow: 0 4px 10px rgba(0,0,0,0.1);}
             .high-risk { background-color: #e74c3c; }
             .clv-card { background-color: #d98c2c; }
             .confidence-card { background-color: #27ae60; }
@@ -495,7 +373,6 @@ with predict_tab:
 
             st.markdown("### 📊 Prediction Results")
             st.markdown("#### Key Metrics")
-
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.markdown(f"""
@@ -503,10 +380,8 @@ with predict_tab:
                     <div>HIGH</div>
                     <div>Churn Probability</div>
                     <div class="metric-value">{prob*100:.1f}%</div>
-                    <div class="metric-sub">{risk_label} RISK<br>±0.0% uncertainty</div>
-                </div>
-                """, unsafe_allow_html=True)
-
+                    <div class="metric-sub">{risk_label} RISK</div>
+                </div>""", unsafe_allow_html=True)
             with col2:
                 st.markdown(f"""
                 <div class="metric-card clv-card">
@@ -514,9 +389,7 @@ with predict_tab:
                     <div>Customer Lifetime Value</div>
                     <div class="metric-value">${clv:,.0f}</div>
                     <div class="metric-sub">{clv_label}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
+                </div>""", unsafe_allow_html=True)
             with col3:
                 st.markdown(f"""
                 <div class="metric-card confidence-card">
@@ -524,25 +397,23 @@ with predict_tab:
                     <div>Prediction Confidence</div>
                     <div class="metric-value">{conf_label}</div>
                     <div class="metric-sub">{confidence*100:.0f}% Certain</div>
-                </div>
-                """, unsafe_allow_html=True)
+                </div>""", unsafe_allow_html=True)
 
-            # ==============================================
-            # 💡 Business Insights Section
-            # ==============================================
+            # ---- Business Insights ----
             st.markdown("### 💡 Business Insights")
             if prediction == 1:
                 st.markdown(f"""
                 - The model predicts **high likelihood of churn ({prob*100:.1f}%)**.
                 - Customer’s CLV is **${clv:,.0f} ({clv_label})**, meaning potential revenue loss if churned.
-                - Recommend targeting with **retention incentives** (discounts, loyalty rewards, or personalized offers).
-                - Focus on improving **service quality and contract engagement** to reduce churn risk.
+                - Recommend targeting with **retention incentives**.
+                - Focus on **service quality and contract engagement** to reduce churn risk.
                 """)
             else:
                 st.markdown(f"""
                 - The customer is **unlikely to churn** (churn probability {prob*100:.1f}%).
                 - CLV of **${clv:,.0f} ({clv_label})** indicates a valuable and stable customer.
-                - Maintain retention through **consistent communication and customer satisfaction monitoring**.
-                - Consider **upselling or cross-selling** premium plans or add-ons.
+                - Maintain retention through **consistent communication**.
+                - Consider **upselling or cross-selling** premium plans.
                 """)
+
 
