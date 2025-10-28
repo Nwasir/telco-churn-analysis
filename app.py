@@ -122,7 +122,7 @@ with performance_tab:
 
     # Map to expected filenames
     importance_files = {
-        "Logistic Regression": REPORTS_DIR / "raw_feature_importance.png",
+        "Logistic Regression": REPORTS_DIR / "lg_importance.png",
         "Random Forest": REPORTS_DIR / "rf_importance.png",
         "XGBoost": REPORTS_DIR / "xgb_importance.png"
     }

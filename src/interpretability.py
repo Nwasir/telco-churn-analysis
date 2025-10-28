@@ -14,6 +14,8 @@ from pathlib import Path
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 
 if __name__ == "__main__":
     Path("reports").mkdir(exist_ok=True)
@@ -59,16 +61,64 @@ if __name__ == "__main__":
         "Importance": importance
     }).sort_values("Importance", ascending=False)
     
-    # Plot results
+    # Plot for logistic regression
     plt.figure(figsize=(12, 8))
     plt.barh(imp_df["Feature"][:15][::-1], imp_df["Importance"][:15][::-1])
-    plt.title("Raw Feature Importance Analysis (Basic Logistic Regression)")
+    plt.title("Logistic Regression Feature Importance Analysis")
     plt.xlabel("Absolute Coefficient Value")
     plt.tight_layout()
-    plt.savefig("reports/raw_feature_importance.png")
-    print("✅ Saved: raw_feature_importance.png")
-    
+    plt.savefig("reports/lg_importance.png")
+    print("✅ Saved: logistic_regression_importance.png")
+
     print("\n🔝 Top 10 Most Important Features:")
     print(imp_df.head(10).to_string(index=False))
+
+    # --- Random Forest Feature Importance ---
+    print("\n🌲 Training Random Forest for Feature Importance...")
+    rf = RandomForestClassifier(n_estimators=300, random_state=42, n_jobs=-1)
+    rf.fit(X_processed, y_val)
+
+    rf_importance = rf.feature_importances_
+    rf_imp_df = pd.DataFrame({
+        "Feature": feature_names,
+        "Importance": rf_importance
+    }).sort_values("Importance", ascending=False)
+
+    plt.figure(figsize=(12, 8))
+    plt.barh(rf_imp_df["Feature"][:15][::-1], rf_imp_df["Importance"][:15][::-1])
+    plt.title("Random Forest Feature Importance Analysis")
+    plt.xlabel("Mean Decrease in Impurity")
+    plt.tight_layout()
+    plt.savefig("reports/rf_importance.png")
+    print("✅ Saved: rf_importance.png")
+
+    # --- XGBoost Feature Importance ---
+    print("\n⚡ Training XGBoost for Feature Importance...")
+    xgb = XGBClassifier(
+        n_estimators=300,
+        learning_rate=0.1,
+        max_depth=5,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        random_state=42,
+        n_jobs=-1,
+        use_label_encoder=False,
+        eval_metric="logloss"
+    )
+    xgb.fit(X_processed, y_val)
+
+    xgb_importance = xgb.feature_importances_
+    xgb_imp_df = pd.DataFrame({
+        "Feature": feature_names,
+        "Importance": xgb_importance
+    }).sort_values("Importance", ascending=False)
+
+    plt.figure(figsize=(12, 8))
+    plt.barh(xgb_imp_df["Feature"][:15][::-1], xgb_imp_df["Importance"][:15][::-1])
+    plt.title("XGBoost Feature Importance Analysis")
+    plt.xlabel("Feature Gain Importance")
+    plt.tight_layout()
+    plt.savefig("reports/xgb_importance.png")
+    print("✅ Saved: xgb_importance.png")
     
     print("\n✅ Raw feature importance analysis complete.")
